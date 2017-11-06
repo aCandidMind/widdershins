@@ -1,9 +1,26 @@
-### Parameters
+{{? data.bodyParameter }}
+```json
+{{=data.bodyParameter.exampleValues.json}}
+```
+{{?}}
 
-Parameter|In|Type|Required|Description
----|---|---|---|---|
-{{~ data.parameters :p}}{{=p.name}}|{{=p.in}}|{{=p.type}}|{{=p.required}}|{{=p.shortDesc}}
+{{? data.pathParameters.length }}
+### Path Parameters
+
+Parameter|Type|Required|Description
+---|---|---|---|
+{{~ data.pathParameters :p}}{{=p.name}}|{{=p.type}}|{{=p.required}}|{{=p.shortDesc}}
 {{~}}
+{{?}}
+
+{{? data.queryParameters.length }}
+### Query Parameters
+
+Parameter|Type|Required|Description
+---|---|---|---|
+{{~ data.queryParameters :p}}{{=p.name}}|{{=p.type}}|{{=p.required}}|{{=p.shortDesc}}
+{{~}}
+{{?}}
 
 {{? data.enums.length}}
 #### Enumerated Values

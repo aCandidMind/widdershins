@@ -108,6 +108,7 @@ function processOperation(op, method, resource, options) {
     data.queryParameters = [];
     data.requiredParameters = [];
     data.headerParameters = [];
+    data.pathParameters = [];
     data.bodyParameter = null;
 
     var sharedParameters = data.openapi.paths[method.path].parameters || [];
@@ -152,6 +153,7 @@ function processOperation(op, method, resource, options) {
         body.required = op.requestBody.required;
         body.description = op.requestBody.description ? op.requestBody.description : 'No description';
         body.schema = op.requestBody.content[Object.keys(op.requestBody.content)[0]].schema;
+        body.example = body.schema.example;
         if (body.schema && typeof body.schema.$ref === 'string') {
             rbType = body.schema.$ref.replace('#/components/schemas/','');
             rbType = '['+rbType+'](#'+common.gfmLink('schema'+rbType)+')';
@@ -212,9 +214,14 @@ function processOperation(op, method, resource, options) {
         }
         if ((param.in == 'body') && (!data.bodyParameter)) { // ignore expanded lines
             data.bodyParameter = param;
+            data.bodyParameter.exampleValues.json = JSON.stringify(param.example, null, 2);
+            data.bodyParameter.exampleValues.object = param.example;
         }
         if (param.in == 'header') {
             data.headerParameters.push(param);
+        }
+        if (param.in == 'path') {
+            data.pathParameters.push(param);
         }
         if (param.in == 'query') {
             let temp = param.exampleValues.object;
@@ -256,7 +263,6 @@ function processOperation(op, method, resource, options) {
         accept.exampleValues.object = data.produces[0];
         data.allHeaders.push(accept);
     }
-
     var codeSamples = (options.codeSamples || op["x-code-samples"]);
     if (codeSamples) {
         data = options.templateCallback('heading_code_samples', 'pre', data);
@@ -354,30 +360,33 @@ function processOperation(op, method, resource, options) {
                 obj = common.getSample(obj, options, {skipReadOnly:true}, data.openapi);
                 if (obj && obj.properties) obj = obj.properties;
                 if (obj) {
-                    if (common.doContentType(consumes, common.jsonContentTypes)) {
-                        content += '```json\n';
-                        content += JSON.stringify(obj, null, 2) + '\n';
-                        content += '```\n';
-                    }
-                    if (common.doContentType(consumes, common.yamlContentTypes)) {
-                        content += '```yaml\n';
-                        content += yaml.safeDump(obj) + '\n';
-                        content += '```\n';
-                    }
-                    if (common.doContentType(consumes, common.formContentTypes)) {
-                        content += '```yaml\n';
-                        content += yaml.safeDump(obj) + '\n';
-                        content += '```\n';
-                    }
-                    if (common.doContentType(consumes, common.xmlContentTypes) && (typeof obj === 'object')) {
-                        if (xmlWrap) {
-                            var newObj = {};
-                            newObj[xmlWrap] = obj;
-                            obj = newObj;
+                    if (false) {
+                        // then use schema ref
+                        if (common.doContentType(consumes, common.jsonContentTypes)) {
+                            content += '```json\n';
+                            content += JSON.stringify(obj, null, 2) + '\n';
+                            content += '```\n';
                         }
-                        content += '```xml\n';
-                        content += xml.getXml(obj, '@', '', true, '  ', false) + '\n';
-                        content += '```\n';
+                        if (common.doContentType(consumes, common.yamlContentTypes)) {
+                            content += '```yaml\n';
+                            content += yaml.safeDump(obj) + '\n';
+                            content += '```\n';
+                        }
+                        if (common.doContentType(consumes, common.formContentTypes)) {
+                            content += '```yaml\n';
+                            content += yaml.safeDump(obj) + '\n';
+                            content += '```\n';
+                        }
+                        if (common.doContentType(consumes, common.xmlContentTypes) && (typeof obj === 'object')) {
+                            if (xmlWrap) {
+                                var newObj = {};
+                                newObj[xmlWrap] = obj;
+                                obj = newObj;
+                            }
+                            content += '```xml\n';
+                            content += xml.getXml(obj, '@', '', true, '  ', false) + '\n';
+                            content += '```\n';
+                        }
                     }
                 }
             }
@@ -459,12 +468,15 @@ function processOperation(op, method, resource, options) {
         data.responses.push(response);
     }
 
-    if (responseSchemas) {
+    if (response.status !== "204") {
         data = options.templateCallback('heading_example_responses', 'pre', data);
         if (data.append) { content += data.append; delete data.append; }
         content += templates.heading_example_responses(data);
         data = options.templateCallback('heading_example_responses', 'post', data);
         if (data.append) { content += data.append; delete data.append; }
+    }
+
+    if (responseSchemas) {
         for (var resp in op.responses) {
             var response = op.responses[resp];
             for (var ct in response.content) {
@@ -483,31 +495,45 @@ function processOperation(op, method, resource, options) {
                         xmlWrap = obj.xml.name;
                     }
                     if (Object.keys(obj).length > 0) {
-                        obj = common.getSample(obj,options,{},data.openapi);
-                        // TODO support embedded/reffed examples
-                        if (common.doContentType(cta, common.jsonContentTypes)) {
-                            content += '```json\n';
-                            content += JSON.stringify(obj, null, 2) + '\n';
-                            content += '```\n';
-                        }
-                        if (common.doContentType(cta, common.yamlContentTypes)) {
-                            content += '```yaml\n';
-                            content += yaml.safeDump(obj) + '\n';
-                            content += '```\n';
-                        }
-                        if (xmlWrap) {
-                            var newObj = {};
-                            newObj[xmlWrap] = obj;
-                            obj = newObj;
-                        }
-                        if ((typeof obj === 'object') && common.doContentType(cta, common.xmlContentTypes)) {
-                            content += '```xml\n';
-                            content += xml.getXml(obj, '@', '', true, '  ', false) + '\n';
-                            content += '```\n';
+                        if (response.example === null || response.example === undefined) {
+                            // then use schema ref
+                            obj = common.getSample(obj,options,{},data.openapi);
+                            // TODO support embedded/reffed examples
+                            if (common.doContentType(cta, common.jsonContentTypes)) {
+                                content += '```json\n';
+                                content += JSON.stringify(obj, null, 2) + '\n';
+                                content += '```\n';
+                            }
+                            if (common.doContentType(cta, common.yamlContentTypes)) {
+                                content += '```yaml\n';
+                                content += yaml.safeDump(obj) + '\n';
+                                content += '```\n';
+                            }
+                            if (xmlWrap) {
+                                var newObj = {};
+                                newObj[xmlWrap] = obj;
+                                obj = newObj;
+                            }
+                            if ((typeof obj === 'object') && common.doContentType(cta, common.xmlContentTypes)) {
+                                content += '```xml\n';
+                                content += xml.getXml(obj, '@', '', true, '  ', false) + '\n';
+                                content += '```\n';
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+
+    for (var resp in op.responses) {
+        var response = op.responses[resp];
+
+        // console.log(response);
+        if (response.example) {
+            content += '```json\n';
+            content += JSON.stringify(response.example, null, 2) + '\n';
+            content += '```\n';
         }
     }
 
@@ -641,10 +667,10 @@ function convert(openapi, options, callback) {
     }
 
     var header = {};
-    header.title = openapi.info.title + ' ' + ((openapi.info.version && openapi.info.version.toLowerCase().startsWith('v')) ? openapi.info.version : 'v' + (openapi.info.version||'?'));
+    header.title = openapi.info.title + ' ' + (openapi.info.version ? openapi.info.version : '?');
 
     // we always show json / yaml / xml if used in content-types
-    header.language_tabs = options.language_tabs;
+    header.language_tabs = [];
 
     circles = circular.getCircularRefs(openapi, options);
 
